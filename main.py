@@ -25,6 +25,7 @@ from openpyxl import load_workbook
 from concurrent.futures import ThreadPoolExecutor
 from generate_excel import create_excel_file
 from read_data import ExcelData
+from apscheduler.schedulers.background import BackgroundScheduler
 import os
 import platform
 
@@ -33,7 +34,6 @@ import platform
 app = Flask(__name__)
 app.secret_key = 'tO$&!|0wkamvVia0?n$NqIRVWOG'
 app.config['SESSION_TYPE'] = 'filesystem'
-app.permanent_session_lifetime = datetime.timedelta(hours=24)
 # USE A SERVICE ACCOUNT
 cred = credentials.Certificate('empoyee-payroll-system-firebase-adminsdk-5h89d-1602329ca8.json')
 db = firestore.client()
@@ -49,6 +49,20 @@ companyname='alian_software'
 # Testing path
 # C:/Users/alian/Desktop/Testing
 # C:/Users/alian/Downloads/my_file.xlsx
+
+
+def clear_session_data():
+    with app.app_context():
+        session.clear()
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(clear_session_data, 'interval', days=1, start_date=datetime.datetime.now().replace(hour=0, minute=0, second=0))
+scheduler.start()
+
+
+
+
+
 
 @app.route('/', methods=["POST", "GET"])
 def login():
@@ -193,7 +207,14 @@ def dashboard(username):
 
 @app.route('/<username>/employeelist', methods=['GET', 'POST'])
 def employee_list(username):
-
+    if 'increment' not in session:
+        increments=db.collection('alian_software').document('increments').get().to_dict()['increments']
+        for increment in increments:
+            converted_date = datetime.datetime.strptime(increment['effectiveDate'], '%Y-%m-%d').date()
+            if datetime.datetime.today().date()==  converted_date:
+                print(increment['empid'],int(increment['total']))
+                db.collection('alian_software').document('employee').collection('employee').document(increment['empid']).update({'salary': int(increment['total']) * 12})
+        session['increment'] = 'Done'
     # SENDING EMPLOYEE MAIL FOR ADD DETAILS
     if request.method == 'POST':
         employee_mail = request.form.get('new_email')
@@ -487,6 +508,8 @@ def personal_data_update(username, id):
     return redirect(url_for('employee_profile', id=id, username=username))
 
 
+
+""" Update/Add Data in Contract And Increment """
 @app.route('/save_data/<empid>/<username>', methods=['POST'])
 def save_data(empid, username):
     """ Update/Add Data in Contract And Increment """
@@ -500,7 +523,10 @@ def save_data(empid, username):
     for key, value in personal_data.items():
         if key.startswith('increment'):
             increment_data.append({key: value})
+
     increment_list = [(index, content) for index, content in enumerate(increment_data)]
+
+
 
     # # CONTRACT DATA
     contract_data = []
@@ -512,9 +538,11 @@ def save_data(empid, username):
 
     if request.method == 'POST':
         data = request.form.to_dict()
+
         contract_increment_data = {}
         for n in range(1, 10):
             for key, value in data.items():
+
                 if key.startswith(f'increment_0{n}'):
                     if data[f'increment_0{n}_increment'].endswith('%'):
                         data[f'increment_0{n}_increment'] = str(float(data[f'increment_0{n}_grossSalary']) * float((data[f'increment_0{n}_increment']).split('%')[0]) * 0.01)
@@ -538,7 +566,7 @@ def save_data(empid, username):
                                 f'total': data[f'increment_0{n}_total'],
                                 f'note': data[f'increment_0{n}_note']}
                         }
-                        print(new_data)
+
 
                         contract_increment_data.update(new_data)
 
@@ -556,7 +584,7 @@ def save_data(empid, username):
                                 f'note': data[f'new_inc_note']}
                         }
 
-                        print(new_data)
+
                         contract_increment_data.update(new_data)
 
                 elif key.startswith(f'contract_0{n}'):
@@ -582,7 +610,20 @@ def save_data(empid, username):
                 else:
                     pass
 
-        db.collection(companyname).document(u'employee').collection('employee').document(empid).update(contract_increment_data)
+
+
+        db.collection(companyname).document('employee').collection('employee').document(empid).update(contract_increment_data)
+        if "increment_01" in contract_increment_data and len(contract_increment_data) >len(increment_data):
+            inc_key = list(contract_increment_data.keys())
+            print(inc_key[-1])
+
+            contract_increment_data[inc_key[-1]]['empid'] = empid
+
+            doc_ref = db.collection(companyname).document('increments')
+            data = contract_increment_data[inc_key[-1]]
+            print(data)
+
+            doc_ref.update({'increments': firestore.ArrayUnion([data])})
 
     return redirect(url_for('employee_profile', id=empid, username=username))
 
