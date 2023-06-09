@@ -1,3 +1,4 @@
+
 import datetime
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, request, redirect, url_for, session, send_file, Response
@@ -212,8 +213,8 @@ def employee_list(username):
         for increment in increments:
             converted_date = datetime.datetime.strptime(increment['effectiveDate'], '%Y-%m-%d').date()
             if datetime.datetime.today().date()==  converted_date:
-                print(increment['empid'],int(increment['total']))
-                db.collection('alian_software').document('employee').collection('employee').document(increment['empid']).update({'salary': int(increment['total']) * 12})
+                print(increment['empid'],(increment['total']))
+                db.collection('alian_software').document('employee').collection('employee').document(increment['empid']).update({'salary':round(float(increment['total']))* 12})
         session['increment'] = 'Done'
     # SENDING EMPLOYEE MAIL FOR ADD DETAILS
     if request.method == 'POST':
@@ -381,25 +382,49 @@ def employee_profile(username, id):
             executor.submit(leaveobj.take_leave, users_ref, data=result)
 
     ''' GET LEAVE DATA '''
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    start=datetime.datetime.now()
+    with ThreadPoolExecutor(max_workers=4) as executor:
         total_leave_future = executor.submit(leaveobj.get_total_leave, users_ref)
         leave_list_future = executor.submit(leaveobj.leave_list, users_ref)
 
     total_leave = total_leave_future.result()
     leave_list = leave_list_future.result()
-
+    end=datetime.datetime.now()
+    print(end-start)
     ''' GET EMPLOYEE DATA '''
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    start=datetime.datetime.now()
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
         personal_data_future = executor.submit(Profile(db, id, companyname).personal_data)
         tds_data_future = executor.submit(Profile(db, id, companyname).tds_data)
         salary_data_future = executor.submit(Profile(db, id, companyname).salary_data)
 
     increment_data = []
     personal_data = personal_data_future.result()
+    end = datetime.datetime.now()
+    print(end - start)
+
+    start=datetime.datetime.now()
     for key,value in personal_data.items():
         if key.startswith('increment'):
             increment_data.append({key: value})
     increment_list = [(index, content) for index, content in enumerate(increment_data)]
+
+    increment_list = [(index, content) for index, content in enumerate(increment_data)]
+
+    sorted_increment_list = sorted(increment_list, key=lambda x: list(x[1].keys())[0])
+
+    sorted_increment_list_with_index = []
+
+    for i, (index, content) in enumerate(sorted_increment_list):
+        if index > 0:
+            content_key = list(content.keys())[0]
+            previous_index = sorted_increment_list[i - 1][0]
+            content[content_key]['index'] = previous_index
+
+        sorted_increment_list_with_index.append((index, content))
+    increment_list=sorted_increment_list_with_index
+    print(sorted_increment_list_with_index)
 
     contract_data = []
     personal_data = personal_data_future.result()
@@ -411,6 +436,10 @@ def employee_profile(username, id):
     data = {'personal_data': personal_data_future.result(), 'tds_data': tds_data_future.result(),
             'salary_data': salary_data_future.result()}
 
+    end = datetime.datetime.now()
+    print(end - start)
+    start=datetime.datetime.now()
+
     leave_status = False
     leave_status_date = ''
     for i in leave_list:
@@ -420,6 +449,9 @@ def employee_profile(username, id):
                 leave_status = True
                 leave_status_date = (f'{leave_list[i]["fromdate"]} to {leave_list[i]["todate"]} ')
 
+    end = datetime.datetime.now()
+    print(end - start)
+
     def get_department_data():
         department = (db.collection(companyname).document(u'department').get()).to_dict()
         return department
@@ -427,9 +459,43 @@ def employee_profile(username, id):
     with concurrent.futures.ThreadPoolExecutor() as executor:
         department_data = executor.submit(get_department_data)
     department = department_data.result()
+
+    print(increment_list)
     return render_template('employee_profile.html', leave=leave_status, data=data, total_leave=total_leave,
                            leave_list=leave_list, leave_date=leave_status_date,username=username, department=department,
                            increment_data=increment_list, contract_data=contract_list)
+
+
+@app.route('/delete_increment/<id>/<username>/<key>/<path:data_dict>/')
+def delete_increment(id, username,key, data_dict):
+    # Convert the string representation of the dictionary back to a dictionary
+    data = eval(data_dict)
+    print(data,id,username,key)
+    doc_ref=db.collection(companyname).document('increments')
+    data.update({'empid':id})
+
+
+    field_to_update = "increments"
+    # Create a reference to the document
+    doc_ref = db.collection(companyname).document("increments")
+    doc = doc_ref.get()
+    if doc.exists:
+        # Get the current array from the document
+        array_data = doc.to_dict().get('increments', [])
+        # Remove the desired dictionary from the array
+        modified_array = [item for item in array_data if item != data]
+        print(modified_array)
+        # Update the document with the modified array
+        doc_ref.set({'increments': modified_array}, merge=True)
+
+        print("Dictionary deleted successfully from the array field.")
+    else:
+        print("Document does not exist.")
+
+
+    db.collection(companyname).document('employee').collection('employee').document(id).update({key: firestore.DELETE_FIELD})
+
+    return redirect(url_for('employee_profile',username=username,id=id))
 
 
 @app.route('/<username>/employee_view/<id>', methods=['GET', 'POST'])
@@ -507,8 +573,6 @@ def personal_data_update(username, id):
         update_obj.update_personal_info(companyname, form, id)
     return redirect(url_for('employee_profile', id=id, username=username))
 
-
-
 """ Update/Add Data in Contract And Increment """
 @app.route('/save_data/<empid>/<username>', methods=['POST'])
 def save_data(empid, username):
@@ -580,7 +644,7 @@ def save_data(empid, username):
                                 f'jobPosition': data[f'new_inc_jobPosition'],
                                 f'effectiveDate': data[f'new_inc_effectiveDate'],
                                 f'increment': data[f'new_inc_increment'],
-                                f'total': data[f'new_inc_total'],
+                                f'total': (data[f'new_inc_total']),
                                 f'note': data[f'new_inc_note']}
                         }
 
@@ -872,3 +936,9 @@ def send_employee_salaryslip(username, salid):
 if __name__ == '__main__':
     # app.run(debug=True, port=300)
     app.run(debug=True, host="0.0.0.0", port=3005)
+
+
+
+
+
+
