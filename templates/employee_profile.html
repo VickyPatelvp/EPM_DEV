@@ -2121,7 +2121,7 @@ pattern="^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$" title="
                                                                                                          name="{{key}}_effectiveDate"
                                                                                                          class="hidden form-control-sm"
                                                                                           
-                                                                                          min="{% if key == 'increment_01' %}{{data['personal_data']['doj']}}{% else %}{{increment_data[index-1].value()['increment_0' + (index)|string]['effectiveDate'] }}{% endif %}"
+                                                                                         
                                                                                                          size="8" onchange="validateDate({{ index }})">
 
                                                                                               </td>

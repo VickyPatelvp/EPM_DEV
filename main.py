@@ -410,21 +410,7 @@ def employee_profile(username, id):
             increment_data.append({key: value})
     increment_list = [(index, content) for index, content in enumerate(increment_data)]
 
-    increment_list = [(index, content) for index, content in enumerate(increment_data)]
 
-    sorted_increment_list = sorted(increment_list, key=lambda x: list(x[1].keys())[0])
-
-    sorted_increment_list_with_index = []
-
-    for i, (index, content) in enumerate(sorted_increment_list):
-        if index > 0:
-            content_key = list(content.keys())[0]
-            previous_index = sorted_increment_list[i - 1][0]
-            content[content_key]['index'] = previous_index
-
-        sorted_increment_list_with_index.append((index, content))
-    increment_list=sorted_increment_list_with_index
-    print(sorted_increment_list_with_index)
 
     contract_data = []
     personal_data = personal_data_future.result()
@@ -574,6 +560,7 @@ def personal_data_update(username, id):
     return redirect(url_for('employee_profile', id=id, username=username))
 
 """ Update/Add Data in Contract And Increment """
+
 @app.route('/save_data/<empid>/<username>', methods=['POST'])
 def save_data(empid, username):
     """ Update/Add Data in Contract And Increment """
@@ -587,10 +574,7 @@ def save_data(empid, username):
     for key, value in personal_data.items():
         if key.startswith('increment'):
             increment_data.append({key: value})
-
     increment_list = [(index, content) for index, content in enumerate(increment_data)]
-
-
 
     # # CONTRACT DATA
     contract_data = []
@@ -602,53 +586,41 @@ def save_data(empid, username):
 
     if request.method == 'POST':
         data = request.form.to_dict()
-
         contract_increment_data = {}
         for n in range(1, 10):
             for key, value in data.items():
-
                 if key.startswith(f'increment_0{n}'):
-                    if data[f'increment_0{n}_increment'].endswith('%'):
-                        data[f'increment_0{n}_increment'] = str(float(data[f'increment_0{n}_grossSalary']) * float((data[f'increment_0{n}_increment']).split('%')[0]) * 0.01)
-                        new_data = {f'increment_0{n}':
+                    new_data = {f'increment_0{n}':
                             {
                                 f'grossSalary': data[f'increment_0{n}_grossSalary'],
                                 f'jobPosition': data[f'increment_0{n}_jobPosition'],
                                 f'effectiveDate': data[f'increment_0{n}_effectiveDate'],
                                 f'increment': data[f'increment_0{n}_increment'],
+                                f'incrementType': data[f'increment_0{n}_increment_type'],
                                 f'total': data[f'increment_0{n}_total'],
                                 f'note': data[f'increment_0{n}_note']}
                         }
-                        contract_increment_data.update(new_data)
-                    else:
-                        new_data = {f'increment_0{n}':
-                            {
-                                f'grossSalary': data[f'increment_0{n}_grossSalary'],
-                                f'jobPosition': data[f'increment_0{n}_jobPosition'],
-                                f'effectiveDate': data[f'increment_0{n}_effectiveDate'],
-                                f'increment': data[f'increment_0{n}_increment'],
-                                f'total': data[f'increment_0{n}_total'],
-                                f'note': data[f'increment_0{n}_note']}
-                        }
+                    contract_increment_data.update(new_data)
 
 
-                        contract_increment_data.update(new_data)
+
 
                 elif key.startswith(f'new_inc_'):
+
                     if data[f'new_inc_grossSalary'] != "" and data[f'new_inc_jobPosition'] != "":
-                        if data[f'new_inc_increment'].endswith('%'):
-                            data[f'new_inc_increment'] = str(float(data[f'new_inc_grossSalary']) * float((data[f'new_inc_increment']).split('%')[0]) * 0.01)
+                        print(data)
+
                         new_data = {f'increment_0{len(increment_list) + 1}':
+
                             {
                                 f'grossSalary': data[f'new_inc_grossSalary'],
                                 f'jobPosition': data[f'new_inc_jobPosition'],
                                 f'effectiveDate': data[f'new_inc_effectiveDate'],
                                 f'increment': data[f'new_inc_increment'],
-                                f'total': (data[f'new_inc_total']),
+                                f'incrementType': data[f'new_drop_increment'],
+                                f'total': data[f'new_inc_total'],
                                 f'note': data[f'new_inc_note']}
                         }
-
-
                         contract_increment_data.update(new_data)
 
                 elif key.startswith(f'contract_0{n}'):
@@ -674,9 +646,7 @@ def save_data(empid, username):
                 else:
                     pass
 
-
-
-        db.collection(companyname).document('employee').collection('employee').document(empid).update(contract_increment_data)
+        db.collection(companyname).document(u'employee').collection('employee').document(empid).update(contract_increment_data)
         if "increment_01" in contract_increment_data and len(contract_increment_data) >len(increment_data):
             inc_key = list(contract_increment_data.keys())
             print(inc_key[-1])
